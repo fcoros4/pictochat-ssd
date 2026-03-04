@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Crear Cuenta</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; background-color: #f4f4f9; }
+        .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; }
+        h2 { color: #333; margin-top: 0; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .link { display: block; margin-top: 15px; font-size: 0.9em; text-align: center; color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Registro</h2>
+        <form id="regForm">
+            <input type="text" id="username" placeholder="Nombre de usuario" required>
+            <input type="password" id="password" placeholder="Contraseña" required>
+            <button type="submit">Crear cuenta</button>
+        </form>
+        <a href="login.html" class="link">¿Ya tienes cuenta? Inicia sesión</a>
+        <p id="msg" style="margin-top: 15px; font-size: 0.9em;"></p>
+    </div>
+
+    <script>
+        document.getElementById('regForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value;
+
+            if (!user || !pass) {
+                document.getElementById('msg').innerText = 'Ambos campos son obligatorios';
+                document.getElementById('msg').style.color = 'red';
+                return;
+            }
+
+            const resp = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+            let data;
+            try { data = await resp.json(); } catch { data = { message: resp.statusText }; }
+            document.getElementById('msg').innerText = data.message || '';
+            if (resp.ok) document.getElementById('msg').style.color = 'green';
+            else document.getElementById('msg').style.color = 'red';
+        };
+    </script>
+</body>
+</html>

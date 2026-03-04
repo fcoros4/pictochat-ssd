@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Iniciar Sesión</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; background-color: #f4f4f9; }
+        .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; }
+        h2 { color: #333; margin-top: 0; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .link { display: block; margin-top: 15px; font-size: 0.9em; text-align: center; color: #28a745; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Login</h2>
+        <form id="logForm">
+            <input type="text" id="username" placeholder="Usuario" required>
+            <input type="password" id="password" placeholder="Contraseña" required>
+            <button type="submit">Entrar</button>
+        </form>
+        <a href="register.html" class="link">¿No tienes cuenta? Regístrate</a>
+        <p id="msg" style="margin-top: 15px; font-size: 0.9em;"></p>
+    </div>
+
+    <script>
+        document.getElementById('logForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value;
+
+            if (!user || !pass) {
+                document.getElementById('msg').innerText = 'Usuario y contraseña son obligatorios';
+                document.getElementById('msg').style.color = 'red';
+                return;
+            }
+
+            const resp = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+            let data;
+            try { data = await resp.json(); } catch { data = { message: resp.statusText }; }
+
+            if (resp.ok) {
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('username', data.username);
+                if (data.role) localStorage.setItem('role', data.role);
+                window.location.href = 'chat.html';
+            } else {
+                document.getElementById('msg').innerText = data.message || 'Error al iniciar sesión';
+                document.getElementById('msg').style.color = 'red';
+            }
+        };
+    </script>
+</body>
+</html>

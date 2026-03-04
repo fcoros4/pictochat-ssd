@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Pictochat SSD</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background-color: #e0e0e0; display: flex; flex-direction: column; align-items: center; }
+        .chat-container { width: 400px; height: 500px; background: #fff; border: 3px solid #555; display: flex; flex-direction: column; border-radius: 10px; }
+        #messages { flex: 1; overflow-y: auto; padding: 10px; border-bottom: 2px solid #ddd; }
+        .msg-item { background: #f0f0f0; margin-bottom: 8px; padding: 8px; border-radius: 5px; position: relative; border-left: 4px solid #007bff; }
+        .msg-author { font-weight: bold; font-size: 0.8em; color: #555; }
+        .controls { padding: 10px; display: flex; gap: 5px; }
+        input { flex: 1; padding: 8px; border: 1px solid #ccc; }
+        button { padding: 8px; cursor: pointer; background: #007bff; color: white; border: none; }
+        .btn-delete { background: #ff4d4d; font-size: 0.7em; }
+        .btn-edit { background: #ffcc00; font-size: 0.7em; color: black; }
+    </style>
+</head>
+<body>
+    <h2>Pictochat - Bienvenido, <span id="user-display"></span></h2>
+    <div class="chat-container">
+        <div id="messages"></div>
+        <form id="chat-form" class="controls">
+            <input type="text" id="content" placeholder="Escribe un mensaje..." required>
+            <button type="submit">Enviar</button>
+        </form>
+    </div>
+    <p id="chat-msg" style="color:red; margin-top:10px; text-align:center;"></p>
+    <button onclick="logout()" style="margin-top:20px; background:#555">Cerrar Sesión</button>
+    <button onclick="generateApiKey()" style="margin-top:20px;">Generar API Key</button>
+    <p style="font-size:0.8em; color:#333;">Usa la API key para acceder a tu cuenta desde otra aplicación.</p>
+    <pre id="api-key-display"></pre>
+
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = 'login.html';
+
+        const role = localStorage.getItem('role') || '';
+        const isAdmin = role === 'admin';
+        document.getElementById('user-display').innerText = localStorage.getItem('username') + (isAdmin ? ' (admin)' : '');
+
+        // editing state
+        let editingId = null;
+
+        async function loadMessages() {
+            const apiKey = localStorage.getItem('api_key');
+            const chatMsg = document.getElementById('chat-msg');
+            chatMsg.innerText = '';
+            const headers = {};
+            if (token) headers.Authorization = `Bearer ${token}`;
+            if (apiKey) headers['X-API-KEY'] = apiKey;
+            const resp = await fetch('/api/chat', { headers });
+            if (resp.status === 401) {
+                chatMsg.innerText = 'API key inválida o caducada. Genera una nueva.';
+                localStorage.removeItem('api_key');
+                return;
+            }
+            if (resp.status === 403) {
+                chatMsg.innerText = 'No tiene permiso para ver los mensajes.';
+                return;
+            }
+            const msgs = await resp.json();
+            const container = document.getElementById('messages');
+            container.innerHTML = '';
+            msgs.forEach(m => {
+                container.innerHTML += `
+                    <div class="msg-item">
+                        <div class="msg-author">${m.author} (${m.date})</div>
+                        <div>${m.content}</div>
+                        ${isAdmin ? `
+                            <button class="btn-edit" onclick='editMsg(${m.id}, ${JSON.stringify(m.content)})'>Editar</button>
+                            <button class="btn-delete" onclick='deleteMsg(${m.id})'>Borrar</button>
+                        ` : ''}
+                    </div>
+                `;
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function generateApiKey() {
+            const resp = await fetch('/api/api-key', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            let data;
+            try { data = await resp.json(); } catch { data = {}; }
+            if (resp.ok && data.api_key) {
+                localStorage.setItem('api_key', data.api_key);
+                document.getElementById('api-key-display').innerText = `Tu API Key: ${data.api_key}`;
+                loadMessages();
+            } else {
+                document.getElementById('chat-msg').innerText = data.message || 'Error generando API key';
+            }
+        }
+
+
+        document.getElementById('chat-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const content = document.getElementById('content').value.trim();
+            if (!content) {
+                document.getElementById('chat-msg').innerText = 'No puedes enviar mensajes vacíos';
+                return;
+            }
+            let url = '/api/chat';
+            let method = 'POST';
+            if (editingId !== null) {
+                url = `/api/chat/${editingId}`;
+                method = 'PUT';
+            }
+            const resp = await fetch(url, {
+                method,
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({ content })
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(()=>({}));
+                document.getElementById('chat-msg').innerText = err.message || (editingId ? 'Error editando mensaje' : 'Error enviando mensaje');
+            } else {
+                document.getElementById('content').value = '';
+                // reset editing state
+                editingId = null;
+                document.querySelector('#chat-form button').innerText = 'Enviar';
+                loadMessages();
+            }
+        };
+
+        async function deleteMsg(id) {
+            if (!confirm("¿Borrar mensaje?")) return;
+            const resp = await fetch(`/api/chat/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(()=>({}));
+                document.getElementById('chat-msg').innerText = err.message || 'Error borrando mensaje';
+                return;
+            }
+            loadMessages();
+        }
+
+        async function editMsg(id, oldContent) {
+            // fill input and switch to edit mode
+            document.getElementById('content').value = oldContent;
+            editingId = id;
+            document.querySelector('#chat-form button').innerText = 'Guardar';
+            document.getElementById('chat-msg').innerText = '';
+            // focus the input field for convenience
+            document.getElementById('content').focus();
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        setInterval(loadMessages, 3000);
+        loadMessages();
+    </script>
+</body>
+</html>
